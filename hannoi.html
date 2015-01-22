@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<style>
+		body {
+			font-family: sans-serif;
+		}
+		#board {
+			max-width: 720px;
+			display: table;
+			margin-left: auto;
+			margin-right: auto;
+			
+			-webkit-touch-callout: none;
+			-webkit-user-select: none;
+			   -moz-user-select: none;
+			    -ms-user-select: none;
+			        user-select: none;
+		}
+		.peg {
+			width: 240px;
+			height: 100%;
+			border-bottom: 10px solid brown;
+			background-image: url('pole.png');
+			background-repeat: repeat-y;
+			background-position: center top;
+			position: relative;
+			display:table-cell; 
+			vertical-align:bottom;
+			margin: 0px 10px;
+		}
+		.disk {
+			-ms-touch-action: none;
+			z-index: 100;
+			height: 40px;
+			margin-left: auto;
+			margin-right: auto;
+			background-color: green;
+			-webkit-border-radius: 15px;
+			   -moz-border-radius: 15px;
+			        border-radius: 15px;
+		}
+		.disk:first-child {
+			cursor: pointer;
+		}
+		.disk:first-child:hover {
+			box-shadow: 0px 0px 10px green;
+		}
+		button {
+			margin-top: 10px;
+			background: #39d;
+			background-image: -webkit-linear-gradient(top, #39d, #28b);
+			background-image:    -moz-linear-gradient(top, #39d, #28b);
+			background-image:     -ms-linear-gradient(top, #39d, #28b);
+			background-image:      -o-linear-gradient(top, #39d, #28b);
+			background-image:         linear-gradient(to bottom, #39d, #28b);
+			-webkit-border-radius: 28;
+			   -moz-border-radius: 28;
+			        border-radius: 28px;
+			color: #fff;
+			padding: 10px 20px 10px 20px;
+			border: none;
+		}
+		button:hover {
+			background: #3bd;
+			background-image: -webkit-linear-gradient(top, #3bd, #39d);
+			background-image:    -moz-linear-gradient(top, #3bd, #39d);
+			background-image:     -ms-linear-gradient(top, #3bd, #39d);
+			background-image:      -o-linear-gradient(top, #3bd, #39d);
+			background-image:         linear-gradient(to bottom, #3bd, #39d);
+		}
+		button:active {
+			background: #2ac;
+			background-image: -webkit-linear-gradient(top, #2ac, #28c);
+			background-image:    -moz-linear-gradient(top, #2ac, #28c);
+			background-image:     -ms-linear-gradient(top, #2ac, #28c);
+			background-image:      -o-linear-gradient(top, #2ac, #28c);
+			background-image:         linear-gradient(to bottom, #2ac, #28c);
+		}
+		.control-cell {
+			display: table-cell;
+		}
+	</style>
+</head>
+<body>
+	<div id="board">
+		<div style="display: table-row-group">
+			<div class="peg"></div>
+			<div class="peg"></div>
+			<div class="peg"></div>
+		</div>
+		<div style="display: table-row-group; width: 100%;">
+			<div class="control-cell">
+				Moves: <span id="move-counter"></span>
+			</div>
+			<div class="control-cell">
+				<button onclick="solve()">Solve</button>
+				<button onclick="reset()">Reset</button>
+			</div>
+			<div class="control-cell">
+				# of disks:
+				<input id="disk-num" type="number" value="2" style="width: 3em;" />
+			</div>
+		</div>
+	</div>
+	<div id="controls">
+		
+	</div>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+	<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/jquery-ui.min.js"></script>
+	<script src="https://raw.githubusercontent.com/furf/jquery-ui-touch-punch/master/jquery.ui.touch-punch.js"></script>
+	<!--script src="jquery.ui.touch-punch.min.js"></script-->
+	<script>
+		
+		var moves; // Moves made
+		var colors; // List of colors for disks
+		var disks; // The number of disks
+		var solver; // A timed function for solving the game
+		$(document).ready(function(){
+			moves = 0;
+			colors = [ // List of colors to use
+				"#3a5",
+				"#e5d",
+				"#38b",
+				"#76b",
+				"#ad9",
+				"#fa6",
+				"#6ad",
+				"#bbd",
+				"#cde",
+				"#cec"
+			];
+			disks = 3; // Number of disks
+			solver;
+			
+			reset() // Setup the board
+		});
+		// Restart the game
+		function reset() {
+			clearInterval(solver);
+		
+			// Reset move counter
+			moves=0;
+			updateMoves(0);
+	
+			// Clear the disks
+			$(".disk").remove()
+			
+			// Add the disks
+			disks = parseInt($("#disk-num").val());
+			disks = disks > 2 ? disks : 2;
+			for(var i = 0; i < disks; i++) {
+				$(".peg:first-child").append(
+					$("<div class='disk'></div>")
+						.css({
+							"background-color":colors[i%colors.length],
+							"width": (40+i/disks*200)+"px"
+						})
+				);
+			}
+			$("#board").css("height",(disks*40+20)+"px");
+			
+			// Allow disks to be dragged
+			$(".disk").draggable({
+				revert: true, // Revert disk positioning to relative
+				revertDuration: 0, // Prevent revert animation
+				containment: "#board", // Don't let the disk leave the game area
+				drag: function(event, ui) {
+					if($(this).prev().length != 0)
+						return false;
+				},
+				stop: function(event, ui) { // Find the peg the disk was moved to
+					var disk =  $(this);
+					for(var i = 0; i < $(".peg").length; i++) {
+						var peg = $(".peg:nth-child("+(i+1)+")");
+						if(event.pageX <= peg.offset().left+peg.width()) {
+							// Only move the disk if there is a larger disk beneath it
+							// (or if there are no disks on the peg)
+							if(peg.find(".disk").length == 0 || peg.find(".disk").width() > disk.width()) {
+								peg.prepend(disk); // Put the disk on top of the peg
+								updateMoves(); // Update the move counter
+								checkWin(); // See if we won
+							}
+							break;
+						}
+					}
+				}
+			});
+		}
+		
+		// Update move counter
+		function updateMoves(m) {
+			if(m == undefined)
+				moves++;
+			else
+				moves = m;
+			$("#move-counter").html(moves);
+		}
+		
+		// Checks the win status
+		function checkWin() {
+				if($(".peg:last-child .disk").length == disks)
+						return true;
+				else
+					return false;
+		}
+		
+		// Solver
+		
+		function solve() {
+			reset();
+			
+			var smallest_pos = 0;
+			updateMoves(0);
+			solver = setInterval(function() {
+				if(moves % 2 == 0)
+					smallest_pos = move_smallest(smallest_pos);
+				else
+					move_next(smallest_pos);
+				updateMoves()
+				if(checkWin())
+					clearInterval(solver);
+			},200);
+		}
+		function move_smallest(smallest_pos){
+			// Move the smallest disk
+			if($(".disk").length % 2 == 0) {
+				$(".peg:nth-child("+(++smallest_pos % 3 + 1)+")").prepend(
+					$(".peg:nth-child("+(smallest_pos)+") .disk:first-child")
+				);
+				return smallest_pos % 3;
+			}
+			else {
+				var next_pos = smallest_pos - 1 >= 0 ? smallest_pos - 1 : 2
+				$(".peg:nth-child("+(next_pos + 1)+")").prepend(
+					$(".peg:nth-child("+(smallest_pos + 1)+") .disk:first-child")
+				);
+				return next_pos;
+			}
+			
+		}
+		function move_next(smallest_pos){
+			var pegs = [1,2,3];
+			pegs.splice(smallest_pos,1);
+			
+			var min_index = ($(".peg:nth-child("+(pegs[0])+") .disk:first-child").width()
+								< $(".peg:nth-child("+(pegs[1])+") .disk:first-child").width()
+								|| $(".peg:nth-child("+(pegs[1])+") .disk:first-child").length == 0)
+								&& $(".peg:nth-child("+(pegs[0])+") .disk:first-child").width() != null
+								? 0 : 1;
+			
+			var min = pegs[min_index];
+			pegs.splice(min_index,1);
+			var max = pegs[0];
+			
+			$(".peg:nth-child("+max+")").prepend(
+				$(".peg:nth-child("+min+") .disk:first-child")
+			);
+		}
+	</script>
+</body>
+</html>
